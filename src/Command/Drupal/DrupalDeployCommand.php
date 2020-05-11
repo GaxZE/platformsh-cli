@@ -2,13 +2,14 @@
 
 namespace Platformsh\Cli\Command\Drupal;
 
-use Platformsh\Cli\Command\CommandBase;
+use Platformsh\Cli\Command\ExtendedCommandBase;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
-class DrupalDeployCommand extends CommandBase
+class DrupalDeployCommand extends ExtendedCommandBase
 {
+
     protected function configure()
     {
         $this
@@ -39,7 +40,8 @@ class DrupalDeployCommand extends CommandBase
 
         // If this directory does not exist, create it.
         if (!is_dir($this->profilesRootDir)) {
-            mkdir($this->profilesRootDir);
+            echo $this->profilesRootDir;
+            // mkdir($this->profilesRootDir);
         }
     }
 }
