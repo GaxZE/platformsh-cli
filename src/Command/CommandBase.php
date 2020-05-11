@@ -195,8 +195,10 @@ abstract class CommandBase extends Command implements MultiAwareInterface
             $promptMigrate = true;
             if ($projectRoot) {
                 $projectConfig = $localProject->getProjectConfig($projectRoot);
-                if (isset($projectConfig['migrate']['3.x']['last_asked'])
-                    && $projectConfig['migrate']['3.x']['last_asked'] > $timestamp - 3600) {
+                if (
+                    isset($projectConfig['migrate']['3.x']['last_asked'])
+                    && $projectConfig['migrate']['3.x']['last_asked'] > $timestamp - 3600
+                ) {
                     $promptMigrate = false;
                 }
             }
@@ -233,9 +235,11 @@ abstract class CommandBase extends Command implements MultiAwareInterface
     {
         // Work around a bug in Console which means the default command's input
         // is always considered to be interactive.
-        if ($this->getName() === 'welcome'
+        if (
+            $this->getName() === 'welcome'
             && isset($GLOBALS['argv'])
-            && array_intersect($GLOBALS['argv'], ['-n', '--no', '-y', '---yes'])) {
+            && array_intersect($GLOBALS['argv'], ['-n', '--no', '-y', '---yes'])
+        ) {
             $input->setInteractive(false);
             return;
         }
@@ -335,7 +339,8 @@ abstract class CommandBase extends Command implements MultiAwareInterface
      *
      * @return void
      */
-    private function continueAfterUpdating($currentVersion, $newVersion, $pharFilename) {
+    private function continueAfterUpdating($currentVersion, $newVersion, $pharFilename)
+    {
         if (!isset($this->input) || !$this->input instanceof ArgvInput || !is_executable($pharFilename)) {
             return;
         }
@@ -383,8 +388,10 @@ abstract class CommandBase extends Command implements MultiAwareInterface
                 $questionHelper = $this->getService('question_helper');
                 /** @var \Platformsh\Cli\Service\Url $url */
                 $urlService = $this->getService('url');
-                if ($urlService->canOpenUrls()
-                    && $questionHelper->confirm("Authentication is required.\nLog in via a browser?")) {
+                if (
+                    $urlService->canOpenUrls()
+                    && $questionHelper->confirm("Authentication is required.\nLog in via a browser?")
+                ) {
                     $this->stdErr->writeln('');
                     $exitCode = $this->runOtherCommand('auth:browser-login', ['--force' => true]);
                     $this->stdErr->writeln('');
@@ -436,7 +443,7 @@ abstract class CommandBase extends Command implements MultiAwareInterface
             if (!$project) {
                 throw new ProjectNotFoundException(
                     "Project not found: " . $config['id']
-                    . "\nEither you do not have access to the project or it no longer exists."
+                        . "\nEither you do not have access to the project or it no longer exists."
                 );
             }
             $this->debug('Project ' . $config['id'] . ' is mapped to the current directory');
@@ -457,9 +464,11 @@ abstract class CommandBase extends Command implements MultiAwareInterface
      */
     public function getCurrentEnvironment(Project $expectedProject = null, $refresh = null)
     {
-        if (!($projectRoot = $this->getProjectRoot())
+        if (
+            !($projectRoot = $this->getProjectRoot())
             || !($project = $this->getCurrentProject())
-            || ($expectedProject !== null && $expectedProject->id !== $project->id)) {
+            || ($expectedProject !== null && $expectedProject->id !== $project->id)
+        ) {
             return false;
         }
 
@@ -471,9 +480,11 @@ abstract class CommandBase extends Command implements MultiAwareInterface
         $config = $localProject->getProjectConfig($projectRoot);
 
         // Check if there is a manual mapping set for the current branch.
-        if (!empty($config['mapping'])
+        if (
+            !empty($config['mapping'])
             && ($currentBranch = $git->getCurrentBranch())
-            && !empty($config['mapping'][$currentBranch])) {
+            && !empty($config['mapping'][$currentBranch])
+        ) {
             $environment = $this->api()->getEnvironment($config['mapping'][$currentBranch], $project, $refresh);
             if ($environment) {
                 $this->debug('Found mapped environment for branch ' . $currentBranch . ': ' . $this->api()->getEnvironmentLabel($environment));
@@ -704,9 +715,11 @@ abstract class CommandBase extends Command implements MultiAwareInterface
     protected function detectRunningInHook()
     {
         $envPrefix = $this->config()->get('service.env_prefix');
-        if (getenv($envPrefix . 'PROJECT')
+        if (
+            getenv($envPrefix . 'PROJECT')
             && basename(getenv('SHELL')) === 'dash'
-            && !$this->isTerminal(STDIN)) {
+            && !$this->isTerminal(STDIN)
+        ) {
             return true;
         }
 
@@ -749,7 +762,7 @@ abstract class CommandBase extends Command implements MultiAwareInterface
             if ($detectCurrent) {
                 throw new RootNotFoundException(
                     "Could not determine the current project."
-                    . "\n\nSpecify it using --project, or go to a project directory."
+                        . "\n\nSpecify it using --project, or go to a project directory."
                 );
             } else {
                 throw new \RuntimeException('You must specify a project.');
@@ -926,9 +939,11 @@ abstract class CommandBase extends Command implements MultiAwareInterface
 
         if ($workerOption !== null) {
             // Check for a conflict with the --app option.
-            if ($appOption !== null
+            if (
+                $appOption !== null
                 && strpos($workerOption, '--') !== false
-                && stripos($workerOption, $appOption . '--') !== 0) {
+                && stripos($workerOption, $appOption . '--') !== 0
+            ) {
                 throw new \InvalidArgumentException(sprintf(
                     'App name "%s" conflicts with worker name "%s"',
                     $appOption,
@@ -997,7 +1012,9 @@ abstract class CommandBase extends Command implements MultiAwareInterface
         $default = null;
         $appNames = $appOption !== null
             ? [$appOption]
-            : array_map(function (WebApp $app) { return $app->name; }, $deployment->webapps);
+            : array_map(function (WebApp $app) {
+                return $app->name;
+            }, $deployment->webapps);
         if (count($appNames) === 1) {
             $default = reset($appNames);
             $choices = [];
@@ -1007,7 +1024,7 @@ abstract class CommandBase extends Command implements MultiAwareInterface
         }
         if ($includeWorkers) {
             foreach ($deployment->workers as $worker) {
-                list($appPart, ) = explode('--', $worker->name, 2);
+                list($appPart,) = explode('--', $worker->name, 2);
                 if (in_array($appPart, $appNames, true)) {
                     $choices[$worker->name] = $worker->name;
                 }
@@ -1023,12 +1040,14 @@ abstract class CommandBase extends Command implements MultiAwareInterface
             /** @var \Platformsh\Cli\Service\QuestionHelper $questionHelper */
             $questionHelper = $this->getService('question_helper');
             if ($includeWorkers && count($deployment->workers)) {
-                $text = sprintf('Enter a number to choose %s app or %s worker:',
+                $text = sprintf(
+                    'Enter a number to choose %s app or %s worker:',
                     count($appNames) === 1 ? 'the' : 'an',
                     count($choices) === 2 ? 'its' : 'a'
                 );
             } else {
-                $text = sprintf('Enter a number to choose %s app:',
+                $text = sprintf(
+                    'Enter a number to choose %s app:',
                     count($appNames) === 1 ? 'the' : 'an'
                 );
             }
@@ -1144,7 +1163,7 @@ abstract class CommandBase extends Command implements MultiAwareInterface
      * @param bool           $selectDefaultEnv
      * @param bool           $detectCurrent Whether to detect the project/environment from the current working directory.
      */
-    final protected function validateInput(InputInterface $input, $envNotRequired = false, $selectDefaultEnv = false, $detectCurrent = true)
+    protected function validateInput(InputInterface $input, $envNotRequired = false, $selectDefaultEnv = false, $detectCurrent = true)
     {
         $projectId = $input->hasOption('project') ? $input->getOption('project') : null;
         $projectHost = $input->hasOption('host') ? $input->getOption('host') : null;
@@ -1197,9 +1216,11 @@ abstract class CommandBase extends Command implements MultiAwareInterface
 
         // Select the environment.
         $envOptionName = 'environment';
-        if ($input->hasArgument($this->envArgName)
+        if (
+            $input->hasArgument($this->envArgName)
             && $input->getArgument($this->envArgName) !== null
-            && $input->getArgument($this->envArgName) !== []) {
+            && $input->getArgument($this->envArgName) !== []
+        ) {
             if ($input->hasOption($envOptionName) && $input->getOption($envOptionName) !== null) {
                 throw new ConsoleInvalidArgumentException(
                     sprintf(
@@ -1560,7 +1581,8 @@ abstract class CommandBase extends Command implements MultiAwareInterface
     /**
      * {@inheritDoc}
      */
-    public function getDescription() {
+    public function getDescription()
+    {
         $description = parent::getDescription();
 
         if ($this->stability !== self::STABILITY_STABLE) {
