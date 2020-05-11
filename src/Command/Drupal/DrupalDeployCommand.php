@@ -17,7 +17,7 @@ class DrupalDeployCommand extends CommandBase
             ->setDescription('Deploy a Drupal Site locally')
             ->addOption('db-sync', 'd', InputOption::VALUE_NONE, "Sync project's database with the daily live backup.")
             ->addOption('core-branch', 'c', InputOption::VALUE_REQUIRED, "The core profile's branch to use during deployment")
-            ->addOption('no-archive', 'a', InputOption::VALUE_NONE, 'Do not create or use a build archive. Run \'platform help build\' for more info.')
+            ->addOption('no-archive', "N", InputOption::VALUE_NONE, 'Do not create or use a build archive. Run \'platform help build\' for more info.')
             ->addOption('environment', 'e', InputOption::VALUE_OPTIONAL, "The environment ID to clone. Defaults to local:deploy:git_default_branch's value in the config.yaml")->addOption('no-deploy-hooks', 'D', InputOption::VALUE_NONE, 'Do not run deployment hooks (drush commands).')
             ->addOption('no-sanitize', 'S', InputOption::VALUE_NONE, 'Do not perform database sanitization.');
         $this->addAppOption();
@@ -32,6 +32,14 @@ class DrupalDeployCommand extends CommandBase
      */
     protected function execute(InputInterface $input, OutputInterface $output)
     {
-        var_dump($input);
+        $this->validateInput($input);
+        $project = $this->getSelectedProject();
+
+        $this->stdErr->writeln("<info>[*]</info> Deployment started for <info>" . $project->getProperty('title') . "</info> ($project->id)");
+
+        // If this directory does not exist, create it.
+        if (!is_dir($this->profilesRootDir)) {
+            mkdir($this->profilesRootDir);
+        }
     }
 }
