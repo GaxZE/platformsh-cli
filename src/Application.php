@@ -1,4 +1,5 @@
 <?php
+
 namespace Platformsh\Cli;
 
 use Platformsh\Cli\Console\EventSubscriber;
@@ -124,6 +125,7 @@ class Application extends ParentApplication
         $commands[] = new Command\Domain\DomainGetCommand();
         $commands[] = new Command\Domain\DomainListCommand();
         $commands[] = new Command\Domain\DomainUpdateCommand();
+        $commands[] = new Command\Drupal\DrupalDeployCommand();
         $commands[] = new Command\Environment\EnvironmentActivateCommand();
         $commands[] = new Command\Environment\EnvironmentBranchCommand();
         $commands[] = new Command\Environment\EnvironmentCheckoutCommand();
@@ -237,7 +239,7 @@ class Application extends ParentApplication
         ];
 
         foreach ($this->getDefinition()
-                      ->getOptions() as $option) {
+            ->getOptions() as $option) {
             $messages[] = sprintf(
                 '  %-29s %s %s',
                 '<info>--' . $option->getName() . '</info>',
@@ -256,8 +258,10 @@ class Application extends ParentApplication
     {
         // Set the input to non-interactive if the yes or no options are used,
         // or if the PLATFORMSH_CLI_NO_INTERACTION variable is not empty.
-        if ($input->hasParameterOption(['--yes', '-y', '--no', '-n'])
-          || getenv($this->envPrefix . 'NO_INTERACTION')) {
+        if (
+            $input->hasParameterOption(['--yes', '-y', '--no', '-n'])
+            || getenv($this->envPrefix . 'NO_INTERACTION')
+        ) {
             $input->setInteractive(false);
         }
 
@@ -268,10 +272,12 @@ class Application extends ParentApplication
         /* @see StreamOutput::hasColorSupport() */
         if (getenv('CLICOLOR_FORCE') === '1') {
             $output->setDecorated(true);
-        } elseif (getenv('NO_COLOR')
+        } elseif (
+            getenv('NO_COLOR')
             || getenv('CLICOLOR_FORCE') === '0'
             || getenv('TERM') === 'dumb'
-            || getenv($this->envPrefix . 'NO_COLOR')) {
+            || getenv($this->envPrefix . 'NO_COLOR')
+        ) {
             $output->setDecorated(false);
         }
 
@@ -372,12 +378,13 @@ class Application extends ParentApplication
             }
         } while ($e = $e->getPrevious());
 
-        if (isset($this->currentCommand)
+        if (
+            isset($this->currentCommand)
             && $this->currentCommand->getName() !== 'welcome'
             && ($main instanceof ConsoleInvalidArgumentException
                 || $main instanceof ConsoleInvalidOptionException
-                || $main instanceof ConsoleRuntimeException
-            )) {
+                || $main instanceof ConsoleRuntimeException)
+        ) {
             $output->writeln(
                 sprintf('Usage: <info>%s</info>', $this->currentCommand->getSynopsis()),
                 OutputInterface::VERBOSITY_QUIET
