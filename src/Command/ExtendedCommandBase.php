@@ -22,82 +22,46 @@ abstract class ExtendedCommandBase extends CommandBase
      */
     protected function validateInput(InputInterface $input, $envNotRequired = false, $selectDefaultEnv = false, $detectCurrent = true)
     {
-        $projectId = $input->hasOption('project') ? $input->getOption('project') : null;
-        $projectHost = $input->hasOption('host') ? $input->getOption('host') : null;
-        $environmentId = null;
-
-        // Identify the project.
-        if ($projectId !== null) {
-            /** @var \Platformsh\Cli\Service\Identifier $identifier */
-            $identifier = $this->getService('identifier');
-            $result = $identifier->identify($projectId);
-            $projectId = $result['projectId'];
-            $projectHost = $projectHost ?: $result['host'];
-            $environmentId = $result['environmentId'];
-        }
-
-        // Load the project ID from an environment variable, if available.
-        $envPrefix = $this->config()->get('service.env_prefix');
-        if ($projectId === null && getenv($envPrefix . 'PROJECT')) {
-            $projectId = getenv($envPrefix . 'PROJECT');
-            $this->stdErr->writeln(sprintf(
-                'Project ID read from environment variable %s: %s',
-                $envPrefix . 'PROJECT',
-                $projectId
-            ), OutputInterface::VERBOSITY_VERBOSE);
-        }
-
-        // Set the --app option.
-        if ($input->hasOption('app') && !$input->getOption('app')) {
-            // An app ID might be provided from the parsed project URL.
-            if (isset($result) && isset($result['appId'])) {
-                $input->setOption('app', $result['appId']);
-                $this->debug(sprintf(
-                    'App name identified as: %s',
-                    $input->getOption('app')
-                ));
+        if ($input->hasArgument('directory')) {
+            if ($directory = $input->getArgument('directory')) {
+                $this->setProjectRoot($directory);
             }
-            // Or from an environment variable.
-            elseif (getenv($envPrefix . 'APPLICATION_NAME')) {
-                $input->setOption('app', getenv($envPrefix . 'APPLICATION_NAME'));
-                $this->stdErr->writeln(sprintf(
-                    'App name read from environment variable %s: %s',
-                    $envPrefix . 'APPLICATION_NAME',
-                    $input->getOption('app')
-                ), OutputInterface::VERBOSITY_VERBOSE);
+            if (!($project = $this->getCurrentProject())) {
+                $this->stdErr->writeln("\n<error>No project found at " . (!empty($directory) ?
+                    $directory : getcwd()) . "</error>");
+                return 1;
             }
         }
 
-        // Select the project.
-        $this->selectProject($projectId, $projectHost, $detectCurrent);
+        if ($input->hasOption('environment')) {
+            if (!$input->getOption('environment')) {
+                $envNotRequired = TRUE;
+            }
+        }
 
-        // Select the environment.
-        $envOptionName = 'environment';
-        if ($input->hasArgument($this->envArgName)
-            && $input->getArgument($this->envArgName) !== null
-            && $input->getArgument($this->envArgName) !== []) {
-            if ($input->hasOption($envOptionName) && $input->getOption($envOptionName) !== null) {
-                throw new ConsoleInvalidArgumentException(
-                    sprintf(
-                        'You cannot use both the <%s> argument and the --%s option',
-                        $this->envArgName,
-                        $envOptionName
-                    )
-                );
-            }
-            $argument = $input->getArgument($this->envArgName);
-            if (is_array($argument) && count($argument) == 1) {
-                $argument = $argument[0];
-            }
-            if (!is_array($argument)) {
-                $this->debug('Selecting environment based on input argument');
-                $this->selectEnvironment($argument, true, $selectDefaultEnv, $detectCurrent);
-            }
-        } elseif ($input->hasOption($envOptionName)) {
-            if ($input->getOption($envOptionName) !== null) {
-                $environmentId = $input->getOption($envOptionName);
-            }
-            $this->selectEnvironment($environmentId, !$envNotRequired, $selectDefaultEnv, $detectCurrent);
+        parent::validateInput($input, $envNotRequired);
+
+        // Some config.
+        $this->profilesRootDir = $this->expandTilde($this->config()->get('local.drupal.profiles_dir'));
+        $this->sitesRootDir = $this->expandTilde($this->config()->get('local.drupal.sites_dir'));
+        $this->selectEnvironment($this->config()->get('local.deploy.remote_environment'));
+        $this->extCurrentProject['internal_site_code'] = $this->getSelectedEnvironment()->getVariable($this->config()->get('local.deploy.internal_site_code_variable'))->value;
+
+        if (!($root = $this->getProjectRoot())) {
+            $root = $this->sitesRootDir . '/' . $this->extCurrentProject['internal_site_code'];
+        }
+        if (file_exists($root) && is_dir($root)) {
+            // The 'currentProject' array is defined as a protected attribute of the
+            // base class ExtendedCommandBase.
+            $this->extCurrentProject['root_dir'] = $root;
+            // Set more info about the current project.
+            $this->extCurrentProject['legacy'] = $this->getService('local.project')->getLegacyProjectRoot() !== FALSE;
+            $this->extCurrentProject['repository_dir'] = $this->extCurrentProject['legacy'] ?
+                $this->extCurrentProject['root_dir'] . '/repository' :
+                $this->extCurrentProject['root_dir'];
+            $this->extCurrentProject['www_dir'] = $this->extCurrentProject['legacy'] ?
+                $this->extCurrentProject['root_dir'] . '/www' :
+                $this->extCurrentProject['root_dir'] . '/_www';
         }
     }
 
