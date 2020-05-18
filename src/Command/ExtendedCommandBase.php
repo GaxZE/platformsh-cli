@@ -7,21 +7,39 @@ use Platformsh\Cli\Local\LocalApplication;
 use Platformsh\Client\Model\Project;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
 
 abstract class ExtendedCommandBase extends CommandBase
 {
+
+    protected $extCurrentProject;
+    protected $profilesRootDir;
+    protected $sitesRootDir;
+
     /**
      * Extend 'validateInput' method.
      *
      * @param InputInterface $input
      * @param bool           $envNotRequired
      * @param bool           $selectDefaultEnv
-     * @param bool           $detectCurrent Whether to detect the project/environment from the current working directory.
      */
     protected function validateInput(InputInterface $input, $envNotRequired = false, $selectDefaultEnv = false, $detectCurrent = true)
     {
+        // Either title or --project.
+        if ($input->hasArgument('title') && $input->getArgument('title') && $input->getOption('project')) {
+            $this->stdErr->writeln("<error>You cannot specify both the option <info>--project</info> and the argument <info>title</info></error>.");
+            return 1;
+        }
+
+        // If title was passed, try and get the PID.
+        if ($input->hasArgument('title') && ($title = $input->getArgument('title'))) {
+            if (($pid = $this->getPidFromTitle($title, $input, $this->output)) !== FALSE) {
+                $input->setOption('project', $pid);
+            }
+        }
+
         if ($input->hasArgument('directory')) {
             if ($directory = $input->getArgument('directory')) {
                 $this->setProjectRoot($directory);
@@ -66,6 +84,39 @@ abstract class ExtendedCommandBase extends CommandBase
     }
 
     /**
+     * Select a project from an internal British Council code for the site.
+     *
+     * @param $title
+     * @param \Symfony\Component\Console\Input\InputInterface $input
+     * @param \Symfony\Component\Console\Output\OutputInterface $output
+     * @return bool|mixed
+     */
+    protected function getPidFromTitle($title, InputInterface $input, OutputInterface $output)
+    {
+        $refresh = $input->hasOption('refresh') ? $input->getOption('refresh') : 1;
+
+        // Filter the projects by title.
+        $projects = array_filter($this->api()->getProjects($refresh ? TRUE :
+            NULL), function (Project $project) use ($title) {
+            return (stripos($project->title, $title) > -1);
+        });
+
+        switch (count($projects)) {
+            case 0:
+                return FALSE;
+            case 1:
+                return end($projects)->id;
+                // More than 1 project matched.
+            default:
+                foreach ($projects as $pid => $project) {
+                    $projects[$pid] = $project->getProperty('title');
+                }
+                $qh = $this->getService('question_helper');
+                return $qh->choose($projects, 'More than one project matched. Please, choose the one you desire to deploy:', $input, $output);
+        }
+    }
+
+    /**
      * Extend addProjectOption() so that the 'title' argument is present whenever
      * the '--project' option is.
      *
@@ -89,6 +140,130 @@ abstract class ExtendedCommandBase extends CommandBase
         return $this;
     }
 
+    /**
+     * Override CommandBase::addAppOption().
+     *
+     * @see \Platformsh\Cli\Command\CommandBase::addAppOption();
+     */
+    protected function addAppOption()
+    {
+        $this->addOption('app', NULL, InputOption::VALUE_OPTIONAL | InputOption::VALUE_IS_ARRAY, 'Specify application(s) to build');
+        return $this;
+    }
+
+    /**
+     * Check if GitHub integration is available by verifying the existence of the
+     * expected GitHub repository.
+     * @return bool|string
+     */
+    protected function gitHubIntegrationAvailable()
+    {
+        $git = $this->getService('git');
+        $git->ensureInstalled();
+        $git->setDefaultRepositoryDir($this->extCurrentProject['repository_dir']);
+        return $git->execute([
+            'ls-remote',
+            $this->config()->get('local.integration.github_base_uri') . '/' . $this->config()->get('local.integration.github_repo_prefix') . $this->extCurrentProject['internal_site_code'] . '.git',
+            'HEAD'
+        ]);
+    }
+
+    /**
+     * Check if Github integration is enabled by verifying the existence of the
+     * expected marker file.
+     * @return bool
+     */
+    public function gitHubIntegrationEnabled()
+    {
+        // The proper way to check for an active integration would be to use
+        // P.sh integrations API. Unfortunately, that API is only accessible by
+        // users with administrative permissions, so they cannot be invoked if
+        // the user deploying locally is a normal developer.
+        return file_exists($this->extCurrentProject['root_dir'] . '/' . $this->config()->get('local.integration.github_local_flag_file'));
+    }
+
+    /**
+     * Enable GitHub integration locally for this project.
+     */
+    public function enableGitHubIntegration()
+    {
+        // Write file that indicates an integration is enabled.
+        // Save original git URI in it.
+        chdir($this->extCurrentProject['repository_dir']);
+        $git = $this->getService('git');
+        $git->ensureInstalled();
+        $git->setDefaultRepositoryDir($this->extCurrentProject['repository_dir']);
+        file_put_contents(
+            $this->extCurrentProject['root_dir'] . '/' . $this->config()->get('local.integration.github_local_flag_file'),
+            $git->getConfig('remote.platform.url')
+        );
+        // Remove "platform" remote.
+        $git->execute([
+            'remote',
+            'rm',
+            'platform',
+        ]);
+        // Set the URL for "origin" remote to the GitHub repo.
+        $git->execute([
+            'remote',
+            'set-url',
+            'origin',
+            $this->config()->get('local.integration.github_base_uri') . '/' . $this->config()->get('local.integration.github_repo_prefix') . $this->extCurrentProject['internal_site_code'] . '.git',
+        ]);
+        // Fetch the remote.
+        $git->execute(['fetch', 'origin']);
+        // Change upstream for currently selected branch.
+        $branch = $git->getCurrentBranch();
+        $git->execute([
+            'branch',
+            $branch,
+            '--set-upstream',
+            "origin/$branch"
+        ]);
+        // Pull the latest.
+        $git->execute(['pull']);
+    }
+
+    /**
+     * Disable GitHub integration locally for this project.
+     */
+    public function disableGitHubIntegration()
+    {
+        chdir($this->extCurrentProject['repository_dir']);
+        $git = $this->getService('git');
+        $git->ensureInstalled();
+        $git->setDefaultRepositoryDir($this->extCurrentProject['repository_dir']);
+        // Retrieve original git URI.
+        $originalGitUri = file_get_contents($this->extCurrentProject['root_dir'] . '/' . $this->config()->get('local.integration.github_local_flag_file'));
+        // Remove file that indicates an integration is enabled.
+        unlink($this->extCurrentProject['root_dir'] . '/' . $this->config()->get('local.integration.github_local_flag_file'));
+
+        // Restore remote "origin" to original URI.
+        $git->execute([
+            'remote',
+            'set-url',
+            'origin',
+            $originalGitUri
+        ]);
+        $git->execute([
+            'remote',
+            'add',
+            'platform',
+            $originalGitUri
+        ]);
+        // Fetch the remote.
+        $git->execute(['fetch', 'platform']);
+        // Restore upstream for currently selected branch.
+        $branch = $git->getCurrentBranch();
+        $git->execute([
+            'branch',
+            $branch,
+            '--set-upstream',
+            "platform/$branch"
+        ]);
+        // Pull the latest.
+        $git->execute(['pull']);
+    }
 
     /**
      * Build a MySQL-safe slug for project-app.
