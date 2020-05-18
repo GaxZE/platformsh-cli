@@ -1,4 +1,5 @@
 <?php
+
 namespace Platformsh\Cli\Command\Project;
 
 use Cocur\Slugify\Slugify;
@@ -147,7 +148,7 @@ class ProjectGetCommand extends CommandBase
             $this->stdErr->writeln('');
             $this->stdErr->writeln(sprintf(
                 'Commit and push to the <info>master</info> branch of the <info>%s</info> Git remote'
-                . ', and %s will build your project automatically.',
+                    . ', and %s will build your project automatically.',
                 $this->config()->get('detection.git_remote_name'),
                 $this->config()->get('service.name')
             ));
@@ -229,8 +230,8 @@ class ProjectGetCommand extends CommandBase
         } else {
             $this->stdErr->writeln(sprintf(
                 "\nYou can build the project with: "
-                . "\n    cd %s"
-                . "\n    %s build",
+                    . "\n    cd %s"
+                    . "\n    %s build",
                 $projectRootRelative,
                 $this->config()->get('application.executable')
             ));
@@ -244,7 +245,8 @@ class ProjectGetCommand extends CommandBase
      *
      * @return void
      */
-    private function validateDepth(InputInterface $input) {
+    private function validateDepth(InputInterface $input)
+    {
         if ($input->getOption('depth') !== null && !preg_match('/^[0-9]+$/', $input->getOption('depth'))) {
             throw new InvalidArgumentException('The --depth value must be an integer.');
         }
@@ -255,7 +257,8 @@ class ProjectGetCommand extends CommandBase
      *
      * @return void
      */
-    private function mergeProjectArgument(InputInterface $input) {
+    private function mergeProjectArgument(InputInterface $input)
+    {
         if ($input->getOption('project') && $input->getArgument('project')) {
             throw new InvalidArgumentException('You cannot use both the --project option and the <project> argument.');
         }
@@ -270,7 +273,8 @@ class ProjectGetCommand extends CommandBase
      *
      * @return string
      */
-    private function chooseDirectory(Project $project, InputInterface $input) {
+    private function chooseDirectory(Project $project, InputInterface $input)
+    {
         /** @var \Platformsh\Cli\Service\QuestionHelper $questionHelper */
         $questionHelper = $this->getService('question_helper');
 
